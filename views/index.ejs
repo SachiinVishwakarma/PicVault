@@ -45,6 +45,15 @@
     .card:hover {
       transform: scale(1.03);
     }
+.preview:has(.card:nth-child(1):nth-last-child(1)) {
+  grid-template-columns: 1fr;
+}
+
+.card img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16/9;
+}
 
     .card img {
       width: 100%;
@@ -139,7 +148,7 @@
         <div class="card">
           <img src="/<%= img.filename %>" alt="<%= img.filename %>" class="thumbnail" />
 
-          <form action="/delete/<%= img._id %>" method="POST">
+          <form action="/delete/<%= img.filename %>" method="POST">
             <button type="submit">Delete</button>
           </form>
         </div>

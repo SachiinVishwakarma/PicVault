@@ -1,9 +1,7 @@
-// routes/imageRoutes.js
 const express = require("express");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
-const Image = require("../models/Image");
 const router = express.Router();
 
 // Multer storage setup
@@ -19,65 +17,72 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-// GET home page
-router.get("/", async (req, res) => {
-  try {
-    const images = await Image.find().sort({ createdAt: -1 });
-    res.render("index", { images });
-  } catch (err) {
-    console.error("Error loading images:", err);
-    res.status(500).send("Error loading images");
-  }
-});
-router.get("/image/:id", async (req, res) => {
-  try {
-    const image = await Image.findById(req.params.id);
-    if (!image) return res.status(404).json({ message: "Image not found" });
+// Store uploaded file metadata in memory (array)
+let uploadedImages = [];
 
-    const imagePath = path.join(__dirname, "..", image.path);
-    res.set("Content-Type", image.mimetype);
-    fs.createReadStream(imagePath).pipe(res);
-  } catch (err) {
-    console.error("Error fetching image:", err);
-    res.status(500).json({ message: "Error fetching image" });
+// GET home page
+router.get("/", (req, res) => {
+  // Sort by time descending
+  const images = [...uploadedImages].sort((a, b) => b.timestamp - a.timestamp);
+  res.render("index", { images });
+});
+
+// GET image by file name (for direct access)
+router.get("/image/:filename", (req, res) => {
+  const filePath = path.join(__dirname, "..", "uploads", req.params.filename);
+  if (fs.existsSync(filePath)) {
+    res.sendFile(filePath);
+  } else {
+    res.status(404).send("Image not found");
   }
 });
+
 // POST upload image
-router.post("/upload", upload.single("profile"), async (req, res) => {
-  try {
-    const image = new Image({
-      filename: req.file.filename,
-      path: req.file.path,
-      mimetype: req.file.mimetype,
-      size: req.file.size
-    });
-    await image.save();
-    res.redirect("/");
-  } catch (err) {
-    console.error("Upload error:", err);
-    res.status(500).send("Upload failed");
+router.post("/upload", upload.single("profile"), (req, res) => {
+  if (!req.file) {
+    return res.status(400).send("No file uploaded");
   }
+
+  const fileData = {
+    filename: req.file.filename,
+    path: req.file.path,
+    mimetype: req.file.mimetype,
+    size: req.file.size,
+    timestamp: Date.now()
+  };
+
+  uploadedImages.push(fileData);
+  res.redirect("/");
 });
 
 // POST delete image
-router.post("/delete/:id", async (req, res) => {
-  try {
-    const image = await Image.findById(req.params.id);
-    if (!image) {
-      return res.status(404).send("Image not found");
-    }
+router.post("/delete/:filename", (req, res) => {
+  const filename = req.params.filename;
+  console.log("Requested to delete:", filename);
 
-    // Ensure the path is valid before deleting
-    if (image.path && typeof image.path === 'string') {
-      fs.unlinkSync(path.resolve(image.path));
-    }
+  const fileIndex = uploadedImages.findIndex(img => img.filename === filename);
+  console.log("Found index:", fileIndex);
 
-    await Image.deleteOne({ _id: req.params.id });
-    res.redirect("/");
-  } catch (err) {
-    console.error("Delete error:", err);
-    res.status(500).send("Failed to delete image");
+  if (fileIndex === -1) {
+    console.log("Image not found in memory list");
+    return res.status(404).send("Image not found");
   }
+
+  const filePath = path.resolve("uploads", filename);
+  console.log("Resolved path:", filePath);
+
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath);
+    console.log("File deleted from disk");
+  } else {
+    console.log("File not found on disk");
+  }
+
+  uploadedImages.splice(fileIndex, 1);
+  console.log("Image removed from memory list");
+
+  res.redirect("/");
 });
+
 
 module.exports = router;
